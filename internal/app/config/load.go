@@ -1,0 +1,77 @@
+package config
+
+import (
+	"errors"
+	"os"
+	"strconv"
+	"sync"
+)
+
+var (
+	App       *AppConfig
+	initError error
+	once      sync.Once
+)
+
+// GetConfig loads singleton config (file -> env -> flags)
+func GetConfig() error {
+	once.Do(func() {
+		cfg := &AppConfig{}
+
+		if err := applyENV(cfg); err != nil {
+			initError = err
+		}
+
+		App = cfg
+	})
+
+	return initError
+}
+
+func applyENV(cfg *AppConfig) error {
+	if consumerGroupID, ok := os.LookupEnv("CONSUMER_GROUP_ID"); ok {
+		id, err := strconv.Atoi(consumerGroupID)
+		if err != nil && id <= 0 {
+			return errors.New("CONSUMER_GROUP_ID must be a positive integer")
+		}
+		cfg.kafkaConsumer.consumerGroupID = id
+	} else {
+		return errors.New("CONSUMER_GROUP_ID must be set")
+	}
+
+	if topic, ok := os.LookupEnv("TOPIC_NAME"); ok {
+		if topic == "" {
+			return errors.New("TOPIC environment variable must be set")
+		}
+		cfg.kafkaConsumer.topicName = topic
+	} else {
+		return errors.New("TOPIC_NAME environment variable must be set")
+	}
+
+	if bootstrapServer, ok := os.LookupEnv("BOOTSTRAP_SERVER"); ok {
+		cfg.kafkaConsumer.bootstrapServers = bootstrapServer
+	} else {
+		return errors.New("BOOTSTRAP_SERVER environment variable must be set")
+	}
+
+	if ack, ok := os.LookupEnv("ACK_MESSAGE"); ok {
+		if ack != "0" && ack != "1" && ack != "all" && ack != "-1" {
+			return errors.New("got invalid ack value, possible values: '0', '1', 'all', '-1'")
+		}
+		cfg.kafkaProducer.ack = ack
+	} else {
+		return errors.New("ACK_MESSAGE environment variable must be set")
+	}
+
+	if url, ok := os.LookupEnv("SCHEMA_REGISTRY_URL"); ok {
+		cfg.schemaRegistry.url = url
+	} else {
+		return errors.New("SCHEMA_REGISTRY_URL environment variable must be set")
+	}
+
+	//	loopTimeout time.Duration
+	//	fetchMinBytes int
+	//	fetchMaxMs    int
+	//  TODO: not all configuration declared in config
+	return nil
+}
