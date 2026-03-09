@@ -3,12 +3,15 @@ package queue
 import (
 	"fmt"
 	"kafka_module_1/internal/app/config"
+	worker_pool "kafka_module_1/internal/pkg/worker-pool"
 
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 )
 
 type KafkaQueue struct {
 	kafkaConsumer *kafka.Consumer
+	partitions    map[PartitionKey][]*kafka.Message
+	wp            *worker_pool.WorkerPool
 }
 
 func New(topic string) (*KafkaQueue, error) {

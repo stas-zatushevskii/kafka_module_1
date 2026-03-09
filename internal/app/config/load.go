@@ -69,6 +69,19 @@ func applyENV(cfg *AppConfig) error {
 		return errors.New("SCHEMA_REGISTRY_URL environment variable must be set")
 	}
 
+	if mode, ok := os.LookupEnv("CONSUMER_MODE"); ok {
+		switch mode {
+		case "s", "single":
+			cfg.kafkaConsumer.mode = SingleMode
+		case "b", "batch":
+			cfg.kafkaConsumer.mode = BatchMode
+		default:
+			return errors.New("got invalid value for CONSUMER_MODE, possible values: 's', 'single', 'b', 'batch'")
+		}
+	} else {
+		return errors.New("CONSUMER_MODE environment variable must be set")
+	}
+
 	//	loopTimeout time.Duration
 	//	fetchMinBytes int
 	//	fetchMaxMs    int
