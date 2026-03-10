@@ -13,6 +13,7 @@ import (
 
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 var (
@@ -81,71 +82,74 @@ func (queue *KafkaQueue) ProcessOneMessage(businessLogicFunc func(context.Contex
 }
 
 func (queue *KafkaQueue) ProcessBatchMessages(ctx context.Context, businessLogicFunc func(context.Context, []byte) error) error {
-	ticker := time.NewTicker(3 * time.Second)   // fixme: get value from cfg (max wait time for create 1 batch)
-	queue.wp = workerPool.NewWorkerPool(ctx, 4) // fixme: get value from cfg
+	g, GCtx := errgroup.WithContext(ctx)
+
+	ticker := time.NewTicker(3 * time.Second)    // todo: get value from cfg
+	queue.wp = workerPool.NewWorkerPool(GCtx, 4) // todo: get value from cfg
 	commitChan := make(chan Ack)
 
-	go func() {
-		go func() {
-			commitCoordinator(ctx, queue.kafkaConsumer, commitChan)
-		}()
-	}()
+	g.Go(func() error {
+		return commitCoordinator(ctx, queue.kafkaConsumer, commitChan)
+	})
 
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ticker.C:
-			for k, v := range queue.partitions {
-				queue.wp.Set(&workerPool.Task{
-					Fn: func(ctx context.Context) error {
-						for _, message := range v {
-							if err := businessLogicFunc(ctx, message.Value); err != nil {
-								return err
+	g.Go(func() error {
+		for {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-ticker.C:
+				for k, v := range queue.partitions {
+					queue.wp.Set(&workerPool.Task{
+						Fn: func(ctx context.Context) error {
+							for _, message := range v {
+								if err := businessLogicFunc(ctx, message.Value); err != nil {
+									return err
+								}
+								commitChan <- Ack{
+									Topic:     k.topic,
+									Partition: k.partition,
+									Offset:    message.TopicPartition.Offset,
+								}
 							}
-							commitChan <- Ack{
-								Topic:     k.topic,
-								Partition: k.partition,
-								Offset:    message.TopicPartition.Offset,
-							}
-						}
-						return nil
-					},
-				})
-				queue.partitions[k] = queue.partitions[k][:] // clear the slice of messages
-			}
-
-		default:
-			err := queue.kafkaConsumer.Poll(100)
-			if err == nil {
-				continue
-			}
-			switch e := err.(type) {
-			case kafka.Error:
-				return e
-			case *kafka.Message:
-				k := PartitionKey{partition: e.TopicPartition.Partition, topic: *e.TopicPartition.Topic}
-				l, ok := queue.partitions[k]
-				if !ok {
-					l = []*kafka.Message{}
+							return nil
+						},
+					})
+					queue.partitions[k] = queue.partitions[k][:] // clear the slice of messages
 				}
-				l = append(l, e)
+
+			default:
+				err := queue.kafkaConsumer.Poll(100)
+				if err == nil {
+					continue
+				}
+				switch e := err.(type) {
+				case kafka.Error:
+					return e
+				case *kafka.Message:
+					k := PartitionKey{partition: e.TopicPartition.Partition, topic: *e.TopicPartition.Topic}
+					l, ok := queue.partitions[k]
+					if !ok {
+						l = []*kafka.Message{}
+					}
+					l = append(l, e)
+				}
 			}
 		}
-	}
+	})
+	return g.Wait()
 }
 
-func commitCoordinator(ctx context.Context, consumer *kafka.Consumer, ackCh <-chan Ack) {
+func commitCoordinator(ctx context.Context, consumer *kafka.Consumer, ackCh <-chan Ack) error {
 	for {
 		select {
 		case <-ctx.Done():
 			log.Println("commit coordinator stopped")
-			return
+			return nil
 
 		case ack, ok := <-ackCh:
 			if !ok {
 				log.Println("ack channel closed")
-				return
+				return nil
 			}
 
 			topic := ack.Topic
@@ -166,7 +170,7 @@ func commitCoordinator(ctx context.Context, consumer *kafka.Consumer, ackCh <-ch
 						ack.Offset+1,
 						err),
 				)
-				continue
+				return CommitFailed
 			}
 
 			logger.Log.Error(
