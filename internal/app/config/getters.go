@@ -31,6 +31,10 @@ func (a *AppConfig) GetTimeout() time.Duration {
 	return a.kafkaProducer.loopTimeout
 }
 
+func (a *AppConfig) GetConsumerMode() ConsumerMode {
+	return a.kafkaConsumer.mode
+}
+
 func (a *AppConfig) GetSchemeRegistryURL() string {
 	return a.schemaRegistry.url
 }

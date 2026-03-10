@@ -69,9 +69,38 @@ func applyENV(cfg *AppConfig) error {
 		return errors.New("SCHEMA_REGISTRY_URL environment variable must be set")
 	}
 
-	//	loopTimeout time.Duration
-	//	fetchMinBytes int
-	//	fetchMaxMs    int
-	//  TODO: not all configuration declared in config
+	if mode, ok := os.LookupEnv("CONSUMER_MODE"); ok {
+		switch mode {
+		case "s", "single":
+			cfg.kafkaConsumer.mode = SingleMode
+		case "b", "batch":
+			cfg.kafkaConsumer.mode = BatchMode
+		default:
+			return errors.New("got invalid value for CONSUMER_MODE, possible values: 's', 'single', 'b', 'batch'")
+		}
+	} else {
+		return errors.New("CONSUMER_MODE environment variable must be set")
+	}
+
+	if fetchMinBytes, ok := os.LookupEnv("FETCH_MIN_BYTES"); ok {
+		v, err := strconv.Atoi(fetchMinBytes)
+		if err != nil {
+			return errors.New("FETCH_MIN_BYTES must be a positive integer")
+		}
+		cfg.kafkaAdmin.fetchMinBytes = v
+	} else {
+		return errors.New("FETCH_MIN_BYTES environment variable must be set")
+	}
+
+	if fetchMaxMs, ok := os.LookupEnv("FETCH_MAX_MS"); ok {
+		v, err := strconv.Atoi(fetchMaxMs)
+		if err != nil {
+			return errors.New("FETCH_MAX_MS must be a positive integer")
+		}
+		cfg.kafkaAdmin.fetchMaxMs = v
+	} else {
+		return errors.New("FETCH_MAX_MS environment variable must be set")
+	}
+
 	return nil
 }
