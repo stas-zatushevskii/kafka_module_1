@@ -31,7 +31,7 @@ func (a *MyConsumer) HandleSingleMessage(ctx context.Context, message *kafka.Mes
 	return nil
 }
 
-func (a *MyConsumer) HandleBatchMessage(ctx context.Context, messages []*kafka.Message) error {
+func (a *MyConsumer) HandleBatchMessages(ctx context.Context, messages []*kafka.Message) error {
 	var (
 		msgs []KafkaMessage
 		info strings.Builder
