@@ -51,4 +51,3 @@ services:
       context: ..
       dockerfile: ./Dockerfile
     environment:
-      env_file: "kafka-settings.env"
