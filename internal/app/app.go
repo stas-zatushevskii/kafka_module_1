@@ -9,10 +9,10 @@ import (
 	os_signal_adapter "kafka_module_1/internal/app/adapters/os-signal-adapter"
 	"kafka_module_1/internal/app/config"
 	"kafka_module_1/internal/pkg/graceful"
+	"kafka_module_1/internal/pkg/logger"
 )
 
 type App struct {
-	KafkaProducer                *kafka_adapter_producer.KafkaProducer
 	KafkaConsumer                *kafka_adapter_consumer.KafkaConsumer
 	OSSignalAdapter              *os_signal_adapter.OsSignalAdapter
 	KafkaInfiniteMessageProducer *infinite_producer.MyProducer
@@ -32,7 +32,7 @@ func New() (*App, error) {
 	osSignalAdapter := os_signal_adapter.New()
 
 	// kafka producer adapter
-	kafkaProducerAdapter, err := kafka_adapter_producer.New(config.App.GetTopicName())
+	kafkaProducerAdapter, err := kafka_adapter_producer.New()
 	if err != nil {
 		return nil, fmt.Errorf("create Kafka producer failed: %v", err)
 	}
@@ -42,14 +42,16 @@ func New() (*App, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create Kafka consumer failed: %v", err)
 	}
+	logger.Log.Info(string(config.App.GetConsumerMode()))
 
 	// infinite loop for message flow in Kafka
-	infinite_producer.New(config.App.GetTopicName(), kafkaProducerAdapter)
+	kafkaProducer := infinite_producer.New(config.App.GetTopicName(), kafkaProducerAdapter)
+	logger.Log.Info("Create Kafka producer successfully")
 
 	app := &App{
-		KafkaProducer:   kafkaProducerAdapter,
-		KafkaConsumer:   kafkaConsumerAdapter,
-		OSSignalAdapter: osSignalAdapter,
+		KafkaInfiniteMessageProducer: kafkaProducer,
+		KafkaConsumer:                kafkaConsumerAdapter,
+		OSSignalAdapter:              osSignalAdapter,
 	}
 
 	return app, nil

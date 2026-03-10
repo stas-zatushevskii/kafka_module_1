@@ -44,18 +44,18 @@ services:
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
       KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
 
-  application:
-    depends_on:
-      - schema-registry
-    build:
-      context: ..
-      dockerfile: ./Dockerfile
-    environment:
-      CONSUMER_GROUP_ID: ${CONSUMER_GROUP_ID}
-      TOPIC_NAME: ${TOPIC_NAME}
-      BOOTSTRAP_SERVER: ${BOOTSTRAP_SERVER}
-      ACK_MESSAGE: ${ACK_MESSAGE}
-      SCHEMA_REGISTRY_URL: ${SCHEMA_REGISTRY_URL}
-      CONSUMER_MODE: ${CONSUMER_MODE}
-      FETCH_MIN_BYTES: ${FETCH_MIN_BYTES}
-      FETCH_MAX_MS: ${FETCH_MAX_MS}
+#  application:
+#    depends_on:
+#      - schema-registry
+#    build:
+#      context: .
+#      dockerfile: ./Dockerfile
+#    environment:
+#      CONSUMER_GROUP_ID: ${CONSUMER_GROUP_ID}
+#      TOPIC_NAME: ${TOPIC_NAME}
+#      BOOTSTRAP_SERVER: ${BOOTSTRAP_SERVER}
+#      ACK_MESSAGE: ${ACK_MESSAGE}
+#      SCHEMA_REGISTRY_URL: ${SCHEMA_REGISTRY_URL}
+#      CONSUMER_MODE: ${CONSUMER_MODE}
+#      FETCH_MIN_BYTES: ${FETCH_MIN_BYTES}
+#      FETCH_MAX_MS: ${FETCH_MAX_MS}

@@ -5,8 +5,8 @@ import "time"
 type ConsumerMode string
 
 var (
-	SingleMode ConsumerMode
-	BatchMode  ConsumerMode
+	SingleMode ConsumerMode = "s"
+	BatchMode  ConsumerMode = "b"
 )
 
 type AppConfig struct {
@@ -17,8 +17,8 @@ type AppConfig struct {
 }
 
 type kafkaProducer struct {
-	ack         string
-	loopTimeout time.Duration
+	ack           string
+	flushInterval time.Duration
 }
 
 type kafkaConsumer struct {

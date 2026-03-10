@@ -13,7 +13,7 @@ type KafkaProducer struct {
 	Serializer *jsonschema.Serializer
 }
 
-func New(topic string) (*KafkaProducer, error) {
+func New() (*KafkaProducer, error) {
 	p, err := kafka.NewProducer(&kafka.ConfigMap{
 		"bootstrap.servers": config.App.GetBootstrapServers(),
 		"acks":              "all",

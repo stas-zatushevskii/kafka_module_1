@@ -33,7 +33,7 @@ func (p *MyProducer) Start(ctx context.Context) error {
 		return nil
 	})
 
-	ticker := time.NewTicker(config.App.GetTimeout())
+	ticker := time.NewTicker(config.App.GetProducerFlushInterval() * time.Millisecond)
 	defer ticker.Stop()
 
 	for {

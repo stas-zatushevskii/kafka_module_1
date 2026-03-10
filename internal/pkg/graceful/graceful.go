@@ -31,7 +31,7 @@ func (gr *graceful) Start(ctx context.Context) error {
 				logger.Log.Error(err.Error())
 				logger.Log.Info("GracefulShutDown started")
 			}
-			return nil
+			return err
 		}
 
 		g.Go(f)

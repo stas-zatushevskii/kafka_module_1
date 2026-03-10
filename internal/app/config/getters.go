@@ -27,8 +27,8 @@ func (a *AppConfig) GetAck() string {
 	return a.kafkaProducer.ack
 }
 
-func (a *AppConfig) GetTimeout() time.Duration {
-	return a.kafkaProducer.loopTimeout
+func (a *AppConfig) GetProducerFlushInterval() time.Duration {
+	return a.kafkaProducer.flushInterval
 }
 
 func (a *AppConfig) GetConsumerMode() ConsumerMode {

@@ -26,7 +26,7 @@ func (a *MyConsumer) HandleSingleMessage(ctx context.Context, message *kafka.Mes
 	}
 
 	// here will be placed service layer call in real project...
-	logger.Log.Info(fmt.Sprintf("got new message from Kafka: %d for UserID", msg.UserID))
+	logger.Log.Info(fmt.Sprintf("single mode: got new message from Kafka for UserID: %d", msg.UserID))
 
 	return nil
 }
@@ -43,9 +43,11 @@ func (a *MyConsumer) HandleBatchMessages(ctx context.Context, messages []*kafka.
 		}
 		msgs = append(msgs, msg)
 	}
-	logger.Log.Info(fmt.Sprintf("got %d messages", len(msgs)))
 	for _, msg := range msgs {
-		info.WriteString(fmt.Sprintf("got new message from Kafka for UserID: %d", msg.UserID))
+		info.WriteString(fmt.Sprintf("%d, ", msg.UserID))
 	}
+
+	logger.Log.Info(fmt.Sprintf("got %d messages: %s", len(msgs), info.String()))
+
 	return nil
 }

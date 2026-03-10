@@ -2,9 +2,13 @@ package config
 
 import (
 	"errors"
+	"log"
 	"os"
 	"strconv"
 	"sync"
+	"time"
+
+	"github.com/joho/godotenv"
 )
 
 var (
@@ -29,6 +33,11 @@ func GetConfig() error {
 }
 
 func applyENV(cfg *AppConfig) error {
+	err := godotenv.Load()
+	if err != nil {
+		log.Println("no .env file found")
+	}
+
 	if consumerGroupID, ok := os.LookupEnv("CONSUMER_GROUP_ID"); ok {
 		id, err := strconv.Atoi(consumerGroupID)
 		if err != nil && id <= 0 {
@@ -100,6 +109,16 @@ func applyENV(cfg *AppConfig) error {
 		cfg.kafkaAdmin.fetchMaxMs = v
 	} else {
 		return errors.New("FETCH_MAX_MS environment variable must be set")
+	}
+
+	if flushInterval, ok := os.LookupEnv("PRODUCER_FLUSH_INTERVAL_MS"); ok {
+		v, err := strconv.Atoi(flushInterval)
+		if err != nil {
+			return errors.New("PRODUCER_FLUSH_INTERVAL_MS must be a positive integer")
+		}
+		cfg.kafkaProducer.flushInterval = time.Duration(v)
+	} else {
+		return errors.New("PRODUCER_FLUSH_INTERVAL_MS environment variable must be set")
 	}
 
 	return nil

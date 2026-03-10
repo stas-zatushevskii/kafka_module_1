@@ -21,17 +21,22 @@ type Key struct {
 
 // ConsumeSingleMode continuously polls and processes Kafka messages using the provided handler;
 // stops only on commit failure, otherwise logs errors and keeps running.
-func (queue *KafkaQueue) ConsumeSingleMode(businessLogicFunc func(context.Context, *kafka.Message) error) {
+func (queue *KafkaQueue) ConsumeSingleMode(ctx context.Context, businessLogicFunc func(context.Context, *kafka.Message) error) error {
 	for {
-		err := queue.ProcessOneMessage(businessLogicFunc)
-		if err != nil {
-			if errors.Is(err, CommitFailed) {
-				logger.Log.Error("Commit failed, consumer stopped", zap.Error(err))
-				return
-			}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			err := queue.ProcessOneMessage(ctx, businessLogicFunc)
+			if err != nil {
+				if errors.Is(err, CommitFailed) {
+					logger.Log.Error("Commit failed, consumer stopped", zap.Error(err))
+					return err
+				}
 
-			logger.Log.Error(err.Error())
-			continue
+				logger.Log.Error(err.Error())
+				continue
+			}
 		}
 	}
 }
@@ -39,24 +44,23 @@ func (queue *KafkaQueue) ConsumeSingleMode(businessLogicFunc func(context.Contex
 // ConsumeBatchMode starts batch consumption mode.
 // It collects messages into batches and passes them to the provided business handler.
 // Consumption stops on commit failure or any unrecoverable Kafka error.
-func (queue *KafkaQueue) ConsumeBatchMode(ctx context.Context, businessLogicFunc func(context.Context, []*kafka.Message) error) {
-	// todo: get batchSize and flush interval from cfg ?
+func (queue *KafkaQueue) ConsumeBatchMode(ctx context.Context, businessLogicFunc func(context.Context, []*kafka.Message) error) error {
 	err := queue.ProcessBatchMessages(ctx, 10, 5, businessLogicFunc)
 	if err != nil {
 		if errors.Is(err, CommitFailed) {
 			logger.Log.Error("Commit failed, consumer stopped", zap.Error(err))
-			return
+			return err
 		}
 
 		logger.Log.Error(err.Error())
 
 	}
+	return nil
 }
 
 // ProcessOneMessage polls once, invokes the handler for a single Kafka message,
 // and commits the offset on success (returns CommitFailed on commit error).
-func (queue *KafkaQueue) ProcessOneMessage(businessLogicFunc func(context.Context, *kafka.Message) error) error {
-	ctx := context.TODO()
+func (queue *KafkaQueue) ProcessOneMessage(ctx context.Context, businessLogicFunc func(context.Context, *kafka.Message) error) error {
 
 	ev := queue.kafkaConsumer.Poll(100) // 100 ms
 	if ev == nil {
@@ -99,16 +103,16 @@ func (queue *KafkaQueue) ProcessBatchMessages(
 		select {
 		case <-ctx.Done():
 			if err := queue.flush(ctx, businessLogicFunc, append([]*kafka.Message(nil), batch...)); err != nil {
-				batch = batch[:0]
 				return err
 			}
-			return nil
+			batch = batch[:0]
+			return ctx.Err()
 
 		case <-ticker.C:
 			if err := queue.flush(ctx, businessLogicFunc, append([]*kafka.Message(nil), batch...)); err != nil {
-				batch = batch[:0]
 				return err
 			}
+			batch = batch[:0]
 
 		default:
 			ev := queue.kafkaConsumer.Poll(100)
@@ -121,9 +125,10 @@ func (queue *KafkaQueue) ProcessBatchMessages(
 				batch = append(batch, e)
 
 				if len(batch) >= batchSize {
-					if err := queue.flush(ctx, businessLogicFunc, batch); err != nil {
+					if err := queue.flush(ctx, businessLogicFunc, append([]*kafka.Message(nil), batch...)); err != nil {
 						return err
 					}
+					batch = batch[:0]
 				}
 
 			case kafka.Error:

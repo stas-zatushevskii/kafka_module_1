@@ -1,19 +1,23 @@
-
-FROM golang:1.25-alpine AS builder
+FROM golang:1.25-bookworm AS builder
 
 WORKDIR /usr/local/src
 
-RUN apk --no-cache add bash git make gcc gettext musl-dev
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash git make gcc libc6-dev pkg-config ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
-COPY ["app/go.mod", "app/go.sum", "./"]
+COPY go.mod go.sum ./
 RUN go mod download
 
-COPY app ./
+COPY . ./
 
 RUN go build -o ./bin/app ./cmd/
 
+FROM debian:bookworm-slim
 
-FROM alpine
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /usr/local/src/bin/app /app
 

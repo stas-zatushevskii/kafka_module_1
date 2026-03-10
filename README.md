@@ -13,3 +13,6 @@
 
 this values must be written in .env file
 
+## Kafka module docs:
+
+- interrupt module: CTR+C
