@@ -4,9 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"kafka_module_1/internal/app/config"
 	"kafka_module_1/internal/pkg/logger"
-	"log"
 	"time"
 
 	workerPool "kafka_module_1/internal/pkg/worker-pool"
@@ -31,33 +29,30 @@ type PartitionKey struct {
 	partition int32
 }
 
-// Consume continuously polls and processes Kafka messages using the provided handler;
+// ConsumeSingleMode continuously polls and processes Kafka messages using the provided handler;
 // stops only on commit failure, otherwise logs errors and keeps running.
-func (queue *KafkaQueue) Consume(ctx context.Context, businessLogicFunc func(context.Context, []byte) error) error {
-	mode := config.App.GetConsumerMode()
-	switch mode {
-	case config.SingleMode:
-		for {
-			err := queue.ProcessOneMessage(businessLogicFunc)
-			if err != nil {
-				if errors.Is(err, CommitFailed) {
-					logger.Log.Error("Commit failed, consumer stopped", zap.Error(err))
-					return err
-				}
-				logger.Log.Error(err.Error())
-				continue
-			}
-		}
-	case config.BatchMode:
-		return queue.ProcessBatchMessages(ctx, businessLogicFunc)
-	}
-	return nil
+func (queue *KafkaQueue) ConsumeSingleMode(ctx context.Context, businessLogicFunc func(context.Context, *kafka.Message) error) error {
 
+	for {
+		err := queue.ProcessOneMessage(businessLogicFunc)
+		if err != nil {
+			if errors.Is(err, CommitFailed) {
+				logger.Log.Error("Commit failed, consumer stopped", zap.Error(err))
+				return err
+			}
+			logger.Log.Error(err.Error())
+			continue
+		}
+	}
+}
+
+func (queue *KafkaQueue) ConsumeBatchMode(ctx context.Context, businessLogicFunc func(context.Context, []*kafka.Message) error) error {
+	return queue.ProcessBatchMessages(ctx, businessLogicFunc)
 }
 
 // ProcessOneMessage polls once, invokes the handler for a single Kafka message,
 // and commits the offset on success (returns CommitFailed on commit error).
-func (queue *KafkaQueue) ProcessOneMessage(businessLogicFunc func(context.Context, []byte) error) error {
+func (queue *KafkaQueue) ProcessOneMessage(businessLogicFunc func(context.Context, *kafka.Message) error) error {
 	ctx := context.TODO()
 
 	ev := queue.kafkaConsumer.Poll(100) // 100 ms
@@ -67,7 +62,7 @@ func (queue *KafkaQueue) ProcessOneMessage(businessLogicFunc func(context.Contex
 
 	switch e := ev.(type) {
 	case *kafka.Message:
-		err := businessLogicFunc(ctx, e.Value)
+		err := businessLogicFunc(ctx, e)
 		if err != nil {
 			return err
 		}
@@ -81,15 +76,15 @@ func (queue *KafkaQueue) ProcessOneMessage(businessLogicFunc func(context.Contex
 	return nil
 }
 
-func (queue *KafkaQueue) ProcessBatchMessages(ctx context.Context, businessLogicFunc func(context.Context, []byte) error) error {
+func (queue *KafkaQueue) ProcessBatchMessages(ctx context.Context, businessLogicFunc func(context.Context, []*kafka.Message) error) error {
 	g, GCtx := errgroup.WithContext(ctx)
 
-	ticker := time.NewTicker(3 * time.Second)    // todo: get value from cfg
-	queue.wp = workerPool.NewWorkerPool(GCtx, 4) // todo: get value from cfg
+	ticker := time.NewTicker(3 * time.Second)        // todo: get value from cfg
+	queue.wp = workerPool.NewWorkerPool(GCtx, 4, 20) // todo: get value from cfg
 	commitChan := make(chan Ack)
 
 	g.Go(func() error {
-		return commitCoordinator(ctx, queue.kafkaConsumer, commitChan)
+		return commitCoordinator(GCtx, queue.kafkaConsumer, commitChan)
 	})
 
 	g.Go(func() error {
@@ -98,23 +93,31 @@ func (queue *KafkaQueue) ProcessBatchMessages(ctx context.Context, businessLogic
 			case <-ctx.Done():
 				return ctx.Err()
 			case <-ticker.C:
-				for k, v := range queue.partitions {
-					queue.wp.Set(&workerPool.Task{
-						Fn: func(ctx context.Context) error {
-							for _, message := range v {
-								if err := businessLogicFunc(ctx, message.Value); err != nil {
-									return err
-								}
-								commitChan <- Ack{
-									Topic:     k.topic,
-									Partition: k.partition,
-									Offset:    message.TopicPartition.Offset,
-								}
-							}
-							return nil
-						},
-					})
-					queue.partitions[k] = queue.partitions[k][:] // clear the slice of messages
+				for k := range queue.partitions {
+					batch := append([]*kafka.Message(nil), queue.partitions[k]...)
+					queue.partitions[k] = queue.partitions[k][:0]
+
+					key := PartitionKey{
+						topic:     k.topic,
+						partition: k.partition,
+					}
+
+					fn := func(ctx context.Context) error {
+						return businessLogicFunc(GCtx, batch)
+					}
+
+					task := workerPool.Task{
+						Key: key.String(),
+						Fn:  fn,
+					}
+
+					queue.wp.Set(task)
+					commitChan <- Ack{
+						Topic:     k.topic,
+						Partition: k.partition,
+						Offset:    kafka.Offset(len(batch)),
+					}
+					return nil
 				}
 
 			default:
@@ -127,11 +130,9 @@ func (queue *KafkaQueue) ProcessBatchMessages(ctx context.Context, businessLogic
 					return e
 				case *kafka.Message:
 					k := PartitionKey{partition: e.TopicPartition.Partition, topic: *e.TopicPartition.Topic}
-					l, ok := queue.partitions[k]
-					if !ok {
-						l = []*kafka.Message{}
-					}
+					l := queue.partitions[k]
 					l = append(l, e)
+					queue.partitions[k] = l
 				}
 			}
 		}
@@ -143,13 +144,11 @@ func commitCoordinator(ctx context.Context, consumer *kafka.Consumer, ackCh <-ch
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("commit coordinator stopped")
-			return nil
+			return errors.New("context canceled")
 
 		case ack, ok := <-ackCh:
 			if !ok {
-				log.Println("ack channel closed")
-				return nil
+				return errors.New("commit coordinator channel closed")
 			}
 
 			topic := ack.Topic
@@ -173,7 +172,7 @@ func commitCoordinator(ctx context.Context, consumer *kafka.Consumer, ackCh <-ch
 				return CommitFailed
 			}
 
-			logger.Log.Error(
+			logger.Log.Info(
 				fmt.Sprintf("committed topic=%s partition=%d next_offset=%d\n",
 					ack.Topic,
 					ack.Partition,
@@ -181,4 +180,8 @@ func commitCoordinator(ctx context.Context, consumer *kafka.Consumer, ackCh <-ch
 			)
 		}
 	}
+}
+
+func (k *PartitionKey) String() string {
+	return fmt.Sprintf("%s-%d", k.topic, k.partition)
 }
