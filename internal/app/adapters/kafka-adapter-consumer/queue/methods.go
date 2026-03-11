@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	CommitFailed = errors.New("commit failed")
+	ErrCommitFailed = errors.New("commit failed")
 )
 
 type Key struct {
@@ -29,7 +29,7 @@ func (queue *KafkaQueue) ConsumeSingleMode(ctx context.Context, businessLogicFun
 		default:
 			err := queue.ProcessOneMessage(ctx, businessLogicFunc)
 			if err != nil {
-				if errors.Is(err, CommitFailed) {
+				if errors.Is(err, ErrCommitFailed) {
 					logger.Log.Error("Commit failed, consumer stopped", zap.Error(err))
 					return err
 				}
@@ -47,7 +47,7 @@ func (queue *KafkaQueue) ConsumeSingleMode(ctx context.Context, businessLogicFun
 func (queue *KafkaQueue) ConsumeBatchMode(ctx context.Context, businessLogicFunc func(context.Context, []*kafka.Message) error) error {
 	err := queue.ProcessBatchMessages(ctx, 10, 5, businessLogicFunc)
 	if err != nil {
-		if errors.Is(err, CommitFailed) {
+		if errors.Is(err, ErrCommitFailed) {
 			logger.Log.Error("Commit failed, consumer stopped", zap.Error(err))
 			return err
 		}
@@ -59,7 +59,7 @@ func (queue *KafkaQueue) ConsumeBatchMode(ctx context.Context, businessLogicFunc
 }
 
 // ProcessOneMessage polls once, invokes the handler for a single Kafka message,
-// and commits the offset on success (returns CommitFailed on commit error).
+// and commits the offset on success (returns ErrCommitFailed on commit error).
 func (queue *KafkaQueue) ProcessOneMessage(ctx context.Context, businessLogicFunc func(context.Context, *kafka.Message) error) error {
 
 	ev := queue.kafkaConsumer.Poll(100) // 100 ms
@@ -74,7 +74,7 @@ func (queue *KafkaQueue) ProcessOneMessage(ctx context.Context, businessLogicFun
 			return err
 		}
 		if _, err := queue.kafkaConsumer.Commit(); err != nil {
-			return CommitFailed
+			return ErrCommitFailed
 		}
 	case kafka.Error:
 		return e
@@ -172,7 +172,7 @@ func (queue *KafkaQueue) flush(ctx context.Context, f func(context.Context, []*k
 	}
 
 	if _, err := queue.kafkaConsumer.CommitOffsets(offsets); err != nil {
-		return CommitFailed
+		return ErrCommitFailed
 	}
 
 	return nil

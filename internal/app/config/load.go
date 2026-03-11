@@ -38,14 +38,24 @@ func applyENV(cfg *AppConfig) error {
 		log.Println("no .env file found")
 	}
 
-	if consumerGroupID, ok := os.LookupEnv("CONSUMER_GROUP_ID"); ok {
+	if consumerGroupID, ok := os.LookupEnv("SINGLE_MODE_CONSUMER_GROUP_ID"); ok {
 		id, err := strconv.Atoi(consumerGroupID)
-		if err != nil && id <= 0 {
-			return errors.New("CONSUMER_GROUP_ID must be a positive integer")
+		if err != nil || id <= 0 {
+			return errors.New("SINGLE_MODE_CONSUMER_GROUP_ID must be a positive integer")
 		}
-		cfg.kafkaConsumer.consumerGroupID = id
+		cfg.kafkaConsumer.singleModeConsumerGroupID = id
 	} else {
-		return errors.New("CONSUMER_GROUP_ID must be set")
+		return errors.New("SINGLE_MODE_CONSUMER_GROUP_ID must be set")
+	}
+
+	if consumerGroupID, ok := os.LookupEnv("BATCH_MODE_CONSUMER_GROUP_ID"); ok {
+		id, err := strconv.Atoi(consumerGroupID)
+		if err != nil || id <= 0 {
+			return errors.New("BATCH_MODE_CONSUMER_GROUP_ID must be a positive integer")
+		}
+		cfg.kafkaConsumer.batchModeConsumerGroupID = id
+	} else {
+		return errors.New("BATCH_MODE_CONSUMER_GROUP_ID must be set")
 	}
 
 	if topic, ok := os.LookupEnv("TOPIC_NAME"); ok {
@@ -76,19 +86,6 @@ func applyENV(cfg *AppConfig) error {
 		cfg.schemaRegistry.url = url
 	} else {
 		return errors.New("SCHEMA_REGISTRY_URL environment variable must be set")
-	}
-
-	if mode, ok := os.LookupEnv("CONSUMER_MODE"); ok {
-		switch mode {
-		case "s", "single":
-			cfg.kafkaConsumer.mode = SingleMode
-		case "b", "batch":
-			cfg.kafkaConsumer.mode = BatchMode
-		default:
-			return errors.New("got invalid value for CONSUMER_MODE, possible values: 's', 'single', 'b', 'batch'")
-		}
-	} else {
-		return errors.New("CONSUMER_MODE environment variable must be set")
 	}
 
 	if fetchMinBytes, ok := os.LookupEnv("FETCH_MIN_BYTES"); ok {

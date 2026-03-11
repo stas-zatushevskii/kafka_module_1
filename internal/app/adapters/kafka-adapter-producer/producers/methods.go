@@ -5,6 +5,8 @@ import (
 	"errors"
 	"time"
 
+	"kafka_module_1/internal/app/domain"
+
 	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
 )
 
@@ -12,16 +14,10 @@ var (
 	SerializationFailed = errors.New("failed to serialize message")
 )
 
-type KafkaMessage struct {
-	UserID   int
-	Username string
-	Event    string
-}
-
 func (p *MyProducer) SendOrderData(ctx context.Context) error {
 	userID := time.Now().Second() % 10000
 
-	data := &KafkaMessage{
+	data := &domain.KafkaMessage{
 		UserID:   userID,
 		Username: "OYOOYOY",
 		Event:    "message",

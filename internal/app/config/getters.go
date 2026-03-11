@@ -2,11 +2,14 @@ package config
 
 import "time"
 
-func (a *AppConfig) GetConsumerGroupID() int {
-	return a.kafkaConsumer.consumerGroupID
+func (a *AppConfig) GetSingleModeConsumerGroupID() int {
+	return a.kafkaConsumer.singleModeConsumerGroupID
 }
 
-// GetTopicName FIXME
+func (a *AppConfig) GetBatchModeConsumerGroupID() int {
+	return a.kafkaConsumer.batchModeConsumerGroupID
+}
+
 func (a *AppConfig) GetTopicName() string {
 	return a.kafkaConsumer.topicName
 }

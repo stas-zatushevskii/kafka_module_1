@@ -11,10 +11,10 @@ type KafkaQueue struct {
 	kafkaConsumer *kafka.Consumer
 }
 
-func New(topic string) (*KafkaQueue, error) {
+func New(topic string, groupID int) (*KafkaQueue, error) {
 	c, err := kafka.NewConsumer(&kafka.ConfigMap{
 		"bootstrap.servers":  config.App.GetBootstrapServers(),
-		"group.id":           config.App.GetConsumerGroupID(),
+		"group.id":           groupID,
 		"session.timeout.ms": 6000,
 		"enable.auto.commit": false,
 		"auto.offset.reset":  "earliest"})

@@ -4,11 +4,6 @@ import "time"
 
 type ConsumerMode string
 
-var (
-	SingleMode ConsumerMode = "s"
-	BatchMode  ConsumerMode = "b"
-)
-
 type AppConfig struct {
 	kafkaConsumer  kafkaConsumer
 	kafkaProducer  kafkaProducer
@@ -22,10 +17,11 @@ type kafkaProducer struct {
 }
 
 type kafkaConsumer struct {
-	bootstrapServers string
-	consumerGroupID  int
-	topicName        string
-	mode             ConsumerMode
+	bootstrapServers          string
+	singleModeConsumerGroupID int
+	batchModeConsumerGroupID  int
+	topicName                 string
+	mode                      ConsumerMode
 }
 
 type kafkaAdmin struct {
